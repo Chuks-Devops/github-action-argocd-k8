@@ -1,0 +1,98 @@
+pipeline{
+    agent any
+    tools{
+        jdk 'jdk'
+        nodejs 'nodejs'
+    }
+    environment {
+        SCANNER_HOME=tool 'sonar'
+        DOCKER_IMAGE = "oshabz/my-app"
+        IMAGE_TAG = "${BUILD_NUMBER}"
+    }
+    stages {
+        stage('clean workspace'){
+            steps{
+                cleanWs()
+            }
+        }
+        stage('Checkout from Git'){
+            steps{
+                git branch: 'main', url: 'https://github.com/chuksdsilent/jenkins-reactjs.git'
+            }
+        }
+        stage("Sonarqube Analysis"){
+            steps{
+                withSonarQubeEnv('sonar') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=my-app \
+                    -Dsonar.projectKey=my-app '''
+                }
+            }
+        }
+        stage("quality gate"){
+           steps {
+                script {
+                    waitForQualityGate abortPipeline: false, credentialsId: 'sonar' 
+                }
+            } 
+        }
+        stage('Install Dependencies') {
+            steps {
+                sh "npm install"
+            }
+        }
+        stage("Docker Build & Push"){
+            steps{
+                script{
+                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){   
+                       sh "docker build -t my-app ."
+                       sh "docker tag my-app ${DOCKER_IMAGE}:${IMAGE_TAG}"
+                       sh "docker push ${DOCKER_IMAGE}:${IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+        stage('Update Deployment File') {
+            environment {
+                GIT_REPO_NAME = "jenkins-reactjs"
+                GIT_USER_NAME = "chuksdsilent"
+            }
+            steps {
+                withCredentials([string(credentialsId: 'github', variable: 'GITHUB_TOKEN')]) {
+                    script {
+                        def prevBuild = currentBuild.previousBuild
+                        def gitEmail = "chuksdsilent@gmail.com"
+                        def gitName = "Samson"
+        
+                        if (prevBuild == null) {
+                            // First build
+                            
+                            sh """
+                                git config user.email "${gitEmail}"
+                                git config user.name "${gitName}"
+        
+                                sed -i "s/replaceImageTag/${BUILD_NUMBER}/g" manifests/deployment.yml
+        
+                                git add manifests/deployment.yml
+                                git commit -m "Initial deployment image set to version ${BUILD_NUMBER}"
+                                git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                            """
+                        } else {
+                            
+                            // Second and later builds
+                            sh """
+                                git config user.email "${gitEmail}"
+                                git config user.name "${gitName}"
+        
+                                sed -i "s/${prevBuild.number}/${BUILD_NUMBER}/g" manifests/deployment.yml
+        
+                                git add manifests/deployment.yml
+                                git commit -m "Update deployment image to version ${BUILD_NUMBER}"
+                                git push https://${GITHUB_TOKEN}@github.com/${GIT_USER_NAME}/${GIT_REPO_NAME} HEAD:main
+                            """
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
