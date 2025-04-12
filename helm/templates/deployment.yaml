@@ -16,6 +16,6 @@ spec:
     spec:
       containers:
         - name: my-app
-          image: web-app:1.0.0
+          image:  "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           ports:
             - containerPort: 5000
