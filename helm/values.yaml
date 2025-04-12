@@ -8,7 +8,7 @@ image:
   repository: oshabz/web-app
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "14418143891"
+  tag: "14418467685"
 
 ingress:
   enabled: false
