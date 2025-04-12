@@ -1,0 +1,9 @@
+.github/
+gitops/
+helm/
+ingress-controller/
+k8s/
+manifests/
+Jenkinsfile
+README.md
+docker-compose.yml
